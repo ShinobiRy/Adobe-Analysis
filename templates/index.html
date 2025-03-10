@@ -82,20 +82,6 @@
                     </table>
                 </div>
             </div>
-
-            <div class="data-table">
-                <h3>Highest Users per College</h3>
-                <div class="table-wrapper">
-                    <table>
-                        <thead><tr><th>Adobe Application</th><th>Top College</th></tr></thead>
-                        <tbody>
-                            {% for app, college in preview_data.highest_users_per_college %}
-                            <tr><td>{{ app }}</td><td>{{ college }}</td></tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
             
             <div class="data-table">
                 <h3>Highest Users per App</h3>
