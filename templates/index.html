@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Adobe College Statistics Generator</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>Adobe College Statistics Generator</h1>
+        
+        {% if error %}
+        <div class="error-message">{{ error }}</div>
+        {% endif %}
+        
+        {% if success %}
+        <div class="success-message">
+            <p>Successfully processed {{ file_count }} files!</p>
+            <p>College-wise statistics have been generated.</p>
+            
+            <!-- Preview section -->
+            <div class="preview-section">
+                <h3>Statistics Summary</h3>
+                
+                <!-- Metrics Grid -->
+                <div class="metrics-grid">
+                    <div class="metric-item">
+                        <div class="metric-label">Total Users</div>
+                        <div class="metric-value">{{ preview_data.total_users }}</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-label">UST Student Users</div>
+                        <div class="metric-value">{{ preview_data.ust_student_users }}</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-label">Other Users</div>
+                        <div class="metric-value">{{ preview_data.other_users }}</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-label">Total Rows</div>
+                        <div class="metric-value">{{ preview_data.total_rows }}</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-label">Duplicate Rows</div>
+                        <div class="metric-value">{{ preview_data.duplicate_rows }}</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-label">Unique Rows</div>
+                        <div class="metric-value">{{ preview_data.total_rows - preview_data.duplicate_rows }}</div>
+                    </div>
+                </div>
+                
+                <!-- Data Tables for Reference -->
+                <div class="data-tables">
+                    <div class="data-table-card">
+                        <h4>College User Count</h4>
+                        <div class="table-wrapper">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>College</th>
+                                        <th>User Count</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for row in preview_data.all_colleges %}
+                                    <tr>
+                                        <td>{{ row.College }}</td>
+                                        <td>{{ row['Total Unique Users'] }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <div class="data-table-card">
+                        <h4>Adobe Apps by College</h4>
+                        <div class="table-wrapper">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>App</th>
+                                        <th>Top College</th>
+                                        <th>Users</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for app, college, count in preview_data.all_apps %}
+                                    <tr>
+                                        <td>{{ app }}</td>
+                                        <td>{{ college }}</td>
+                                        <td>{{ count }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <a href="{{ url_for('download') }}" class="download-btn">Download College Statistics</a>
+        </div>
+        {% endif %}
+        
+        <div class="upload-section">
+            <form action="/" method="POST" enctype="multipart/form-data" id="upload-form">
+                <div class="file-input-container">
+                    <label for="file-input" class="file-input-label">Select Adobe Log Files</label>
+                    <input type="file" name="files" id="file-input" multiple accept=".csv,.xlsx" class="file-input">
+                    <div id="file-list" class="file-list"></div>
+                </div>
+                
+                <p class="file-requirement">Upload Adobe content logs (.csv or .xlsx) containing 'User Email' and 'Item Path' columns.</p>
+                
+                <button type="submit" class="submit-btn">Generate College Statistics</button>
+            </form>
+        </div>
+    </div>
+    
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>
