@@ -44,7 +44,7 @@ def get_all_adobe_apps():
         "Adobe Substance 3D",
         "Adobe Fresco",
         "Adobe Character Animator",
-        "Adobe Express",  # Added Adobe Express
+        "Adobe Express",
         
         # Video/Audio Apps
         "Adobe Audition",
@@ -92,13 +92,14 @@ def extract_adobe_app(item_path, debug=False):
         "com.adobe.animate": "Adobe Animate",
         "com.adobe.audition": "Adobe Audition",
         "com.adobe.dreamweaver": "Adobe Dreamweaver",
-        "com.adobe.express": "Adobe Express"  # Added for Adobe Express
+        "com.adobe.express": "Adobe Express"
     }
     
     # Check for app identifiers in the path
     for package, app_name in adobe_packages.items():
         if package in item_path_str:
             return app_name
+            
     # Check for app names in path
     app_names = {
         "photoshop": "Adobe Photoshop",
@@ -110,7 +111,7 @@ def extract_adobe_app(item_path, debug=False):
         "xd": "Adobe XD",
         "indesign": "Adobe InDesign",
         "animate": "Adobe Animate",
-        "express": "Adobe Express",  # Added Adobe Express
+        "express": "Adobe Express",
     }
     
     for app_pattern, app_name in app_names.items():
@@ -269,6 +270,61 @@ def is_ust_student(email):
     except Exception:
         return False
 
+def process_user_app_data(ust_df):
+    """
+    Process the first app usage for each student.
+    Extracts and returns user-college-app mapping.
+    """
+    # Sort by timestamp if available to get first genuine app usage
+    if 'Timestamp' in ust_df.columns:
+        ust_df = ust_df.sort_values('Timestamp')
+    
+    # For each user, get their first app usage
+    user_apps = {}
+    for _, row in ust_df.iterrows():
+        email = row['User Email']
+        app = row['Adobe App']
+        if email not in user_apps:
+            user_apps[email] = {
+                'app': app,
+                'college': row['College']
+            }
+    
+    # Convert to DataFrame
+    return pd.DataFrame([
+        {'User Email': email, 'Adobe App': data['app'], 'College': data['college']}
+        for email, data in user_apps.items()
+    ])
+
+def create_college_app_matrix(first_app_usage, valid_colleges, apps):
+    """Create the college by app matrix for reporting."""
+    college_app_matrix = []
+    for college in valid_colleges:
+        college_users = first_app_usage[first_app_usage['College'] == college]
+        college_unique_users = len(college_users)
+        row = [college, college_unique_users]  # College name and total unique users
+        
+        # Count for each app
+        for app in apps:
+            app_users = len(college_users[college_users['Adobe App'] == app])
+            row.append(app_users)
+        
+        college_app_matrix.append(row)
+    
+    return college_app_matrix
+
+def get_highest_app_users(college_df, apps):
+    """Extract highest users per app information."""
+    highest_users = []
+    for app in apps:
+        app_users = college_df[college_df['College'] != 'TOTAL'][['College', app]]
+        max_users = app_users[app].max()
+        if max_users > 0:
+            college = app_users.loc[app_users[app] == max_users, 'College'].iloc[0]
+            highest_users.append([app, college, max_users])
+    
+    return highest_users
+
 def generate_college_usage_stats(df, output_file):
     """Generate Excel file with college-wise Adobe app usage statistics."""
     print("\nGenerating college usage statistics...")
@@ -317,47 +373,15 @@ def generate_college_usage_stats(df, output_file):
             ust_df = df[df['is_ust_student']].copy()
             ust_df['College'] = ust_df['User Email'].apply(extract_college_unit)
             
-            # Sort by timestamp if available to get first genuine app usage
-            if 'Timestamp' in ust_df.columns:
-                ust_df = ust_df.sort_values('Timestamp')
+            # Process user app data
+            first_app_usage = process_user_app_data(ust_df)
             
-            # For each user, get their first app usage
-            user_apps = {}
-            for _, row in ust_df.iterrows():
-                email = row['User Email']
-                app = row['Adobe App']
-                if email not in user_apps:
-                    user_apps[email] = {
-                        'app': app,
-                        'college': row['College']
-                    }
-            
-            # Verify user count matches expected UST users
-            print(f"Processed first app for {len(user_apps)} UST student users (expected {ust_student_users})")
-            
-            # Convert to DataFrame
-            first_app_usage = pd.DataFrame([
-                {'User Email': email, 'Adobe App': data['app'], 'College': data['college']}
-                for email, data in user_apps.items()
-            ])
-            
-            # Get unique colleges (excluding 'Others') and apps
+            # Get unique colleges and apps
             valid_colleges = [college.upper() for college in get_valid_colleges()]
             apps = get_all_adobe_apps()
             
             # Create cross-tabulation of colleges and apps
-            college_app_matrix = []
-            for college in valid_colleges:
-                college_users = first_app_usage[first_app_usage['College'] == college]
-                college_unique_users = len(college_users)
-                row = [college, college_unique_users]  # College name and total unique users
-                
-                # Count for each app
-                for app in apps:
-                    app_users = len(college_users[college_users['Adobe App'] == app])
-                    row.append(app_users)
-                
-                college_app_matrix.append(row)
+            college_app_matrix = create_college_app_matrix(first_app_usage, valid_colleges, apps)
             
             # Create column names
             columns = ['College', 'Total Unique Users'] + apps
@@ -374,14 +398,8 @@ def generate_college_usage_stats(df, output_file):
             
             college_df.loc[len(college_df)] = total_row
             
-            # Create highest users section
-            highest_users = []
-            for app in apps:
-                app_users = college_df[college_df['College'] != 'TOTAL'][['College', app]]
-                max_users = app_users[app].max()
-                if max_users > 0:
-                    college = app_users.loc[app_users[app] == max_users, 'College'].iloc[0]
-                    highest_users.append([app, college, max_users])
+            # Get highest users per app
+            highest_users = get_highest_app_users(college_df, apps)
             
             # Add empty row
             college_df.loc[len(college_df)] = [''] * len(college_df.columns)
@@ -392,6 +410,8 @@ def generate_college_usage_stats(df, output_file):
             # Add highest users data
             for app, college, count in highest_users:
                 college_df.loc[len(college_df)] = [f'{app}:', college, count] + [''] * (len(college_df.columns) - 3)
+                
+                
             
             # Write main college distribution to Excel
             college_df.to_excel(writer, sheet_name='College Distribution', index=False)
@@ -422,12 +442,11 @@ def generate_college_usage_stats(df, output_file):
             other_users_summary.to_excel(writer, sheet_name='Other Users', index=False)
             format_excel_sheet(writer.sheets['Other Users'])
             
-            # Get top apps data for preview
-            app_counts = df['Adobe App'].value_counts().reset_index()
-            app_counts.columns = ['App', 'Count']
-            top_apps = app_counts.head(5).values.tolist()
+        # Format data for template display
+        # Restructure highest_users to match template expectations
+        highest_users_per_app = [(app, college, count) for app, college, count in highest_users if count > 0]
+        highest_users_per_college = [(app, college) for app, college, _ in highest_users if college]
             
-        # Return enhanced preview data - add row count metrics
         preview_data = {
             "total_users": total_users,
             "ust_student_users": ust_student_users,
@@ -435,7 +454,8 @@ def generate_college_usage_stats(df, output_file):
             "total_rows": total_rows,
             "duplicate_rows": duplicate_rows,
             "all_colleges": college_df[college_df['College'] != 'TOTAL'][['College', 'Total Unique Users']].to_dict('records'),
-            "all_apps": [(app, college, count) for app, college, count in highest_users if count > 0]
+            "highest_users_per_app": highest_users_per_app,
+            "highest_users_per_college": highest_users_per_college
         }
             
         return True, preview_data
@@ -445,6 +465,110 @@ def generate_college_usage_stats(df, output_file):
         import traceback
         print(traceback.format_exc())
         return False, {}
+
+def process_files(files):
+    """
+    Process uploaded files and return a combined DataFrame with Adobe app detection.
+    Ensures proper concatenation of all records and tracks duplicate rows.
+    Also identifies users that appear in multiple files.
+    """
+    # Initialize tracking variables
+    all_dataframes = []
+    total_rows_before = 0
+    users_per_file = {}
+    
+    # Process each file
+    for i, file in enumerate(files):
+        filename = secure_filename(file.filename)
+        file_path = os.path.join(UPLOAD_FOLDER, filename)
+        file.save(file_path)
+        
+        try:
+            # Read the file based on its extension
+            if filename.endswith('.csv'):
+                try:
+                    df = pd.read_csv(file_path, encoding='utf-8', low_memory=False)
+                except:
+                    # Fall back to Python engine if C engine fails
+                    df = pd.read_csv(file_path, encoding='utf-8', on_bad_lines='skip', engine='python')
+            else:  # .xlsx
+                df = pd.read_excel(file_path)
+            
+            # Track row counts and users
+            total_rows_before += len(df)
+            
+            if 'User Email' in df.columns:
+                file_users = set(df['User Email'].dropna().unique())
+                users_per_file[f"File {i+1}: {filename}"] = file_users
+                print(f"Processed {filename}: {len(df)} rows, {len(file_users)} unique users")
+            else:
+                print(f"Processed {filename}: {len(df)} rows, column 'User Email' not found")
+            
+            all_dataframes.append(df)
+        finally:
+            # Clean up the temp file
+            if os.path.exists(file_path):
+                os.remove(file_path)
+    
+    # Identify users that appear in multiple files
+    print("\n--- Users appearing in multiple files ---")
+    all_users_with_files = {}
+    for file_name, users in users_per_file.items():
+        for user in users:
+            if user not in all_users_with_files:
+                all_users_with_files[user] = []
+            all_users_with_files[user].append(file_name)
+    
+    # Print users found in multiple files
+    duplicate_users_across_files = {user: files for user, files in all_users_with_files.items() if len(files) > 1}
+    if duplicate_users_across_files:
+        print(f"Found {len(duplicate_users_across_files)} users appearing in multiple files:")
+        for user, files in duplicate_users_across_files.items():
+            print(f"User {user} appears in: {', '.join(files)}")
+    else:
+        print("No users found in multiple files.")
+    
+    # Combine all dataframes
+    if not all_dataframes:
+        raise ValueError("No valid data found in uploaded files.")
+        
+    # Concatenate all dataframes
+    combined_df = pd.concat(all_dataframes, ignore_index=True, sort=False)
+    
+    # Validation: Make sure we didn't lose any rows
+    total_rows_after = len(combined_df)
+    print(f"\nTotal rows before concatenation: {total_rows_before}")
+    print(f"Total rows after concatenation: {total_rows_after}")
+    
+    if total_rows_before != total_rows_after:
+        print("WARNING: Row count mismatch after concatenation!")
+    
+    # Count duplicates - rows where the same user accessed the same item path
+    total_rows = len(combined_df)
+    duplicate_count = total_rows - len(combined_df.drop_duplicates(subset=['User Email', 'Item Path']))
+    print(f"Total rows: {total_rows}, Duplicate rows: {duplicate_count}")
+    
+    # Save combined file
+    combined_csv = os.path.join(UPLOAD_FOLDER, 'combined_adobe_logs.csv')
+    combined_df.to_csv(combined_csv, index=False)
+    
+    # Verify that the required columns exist
+    required_columns = ['User Email', 'Item Path']
+    missing_columns = [col for col in required_columns if col not in combined_df.columns]
+    
+    if missing_columns:
+        raise ValueError(f"Required columns missing in input files: {', '.join(missing_columns)}. "
+                       f"Analysis requires columns: {', '.join(required_columns)}")
+    
+    # Process for Adobe analysis
+    combined_df['User Email'] = combined_df['User Email'].str.strip()
+    combined_df['Adobe App'] = combined_df['Item Path'].apply(extract_adobe_app)
+    
+    # Add row metrics to the dataframe as attributes
+    combined_df.total_rows = total_rows
+    combined_df.duplicate_rows = duplicate_count
+    
+    return combined_df
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
@@ -495,157 +619,6 @@ def index():
             return render_template('index.html', error=f"Error processing files: {error_msg}")
     
     return render_template('index.html')
-
-def combine_csv_files(files):
-    """
-    Combines CSV files using a simple line-by-line approach.
-    Takes the header from the first file and appends all data rows.
-    """
-    # Save uploaded files to the upload folder
-    file_paths = []
-    for file in files:
-        filename = secure_filename(file.filename)
-        file_path = os.path.join(UPLOAD_FOLDER, filename)
-        file.save(file_path)
-        file_paths.append(file_path)
-    
-    try:
-        # Open the output file
-        with open(OUTPUT_FILE, 'w', encoding='utf-8') as outfile:
-            # Process each file
-            for i, file_path in enumerate(file_paths):
-                print(f'Processing file {i + 1}/{len(file_paths)}: {file_path}')
-                
-                # Read the current file
-                with open(file_path, 'r', encoding='utf-8', errors='replace') as infile:
-                    # Get all lines
-                    lines = infile.readlines()
-                    
-                    if not lines:
-                        print(f'File {file_path} is empty. Skipping.')
-                        continue
-                    
-                    # For the first file, write the header
-                    if i == 0:
-                        outfile.write(lines[0])
-                    
-                    # Write data rows (skip header)
-                    for line in lines[1:]:
-                        if line.strip():  # Only write non-empty lines
-                            outfile.write(line)
-    finally:
-        # Clean up temporary files
-        for file_path in file_paths:
-            if os.path.exists(file_path):
-                os.remove(file_path)
-
-def process_files(files):
-    """
-    Process uploaded files and return a combined DataFrame with Adobe app detection.
-    Ensures proper concatenation of all records and tracks duplicate rows.
-    Also identifies users that appear in multiple files.
-    """
-    # First, combine all files
-    all_dataframes = []
-    total_rows_before = 0
-    
-    # Track users in each file to identify duplicates across files
-    users_per_file = {}
-    
-    for i, file in enumerate(files):
-        filename = secure_filename(file.filename)
-        file_path = os.path.join(UPLOAD_FOLDER, filename)
-        file.save(file_path)
-        
-        try:
-            if filename.endswith('.csv'):
-                # First try to use the C engine, which is faster
-                try:
-                    df = pd.read_csv(file_path, encoding='utf-8', low_memory=False)
-                except:
-                    # If C engine fails, fall back to Python engine without low_memory option
-                    df = pd.read_csv(file_path, encoding='utf-8', on_bad_lines='skip', engine='python')
-            else:  # .xlsx
-                df = pd.read_excel(file_path)
-            
-            # Keep track of row counts for validation
-            total_rows_before += len(df)
-            
-            # Track users in this file
-            if 'User Email' in df.columns:
-                file_users = set(df['User Email'].dropna().unique())
-                users_per_file[f"File {i+1}: {filename}"] = file_users
-                print(f"Processed {filename}: {len(df)} rows, {len(file_users)} unique users")
-            else:
-                print(f"Processed {filename}: {len(df)} rows, column 'User Email' not found")
-            
-            all_dataframes.append(df)
-        finally:
-            # Clean up the temp file
-            if os.path.exists(file_path):
-                os.remove(file_path)
-    
-    # Identify users that appear in multiple files
-    print("\n--- Users appearing in multiple files ---")
-    all_users_with_files = {}
-    for file_name, users in users_per_file.items():
-        for user in users:
-            if user not in all_users_with_files:
-                all_users_with_files[user] = []
-            all_users_with_files[user].append(file_name)
-    
-    # Print users found in multiple files
-    duplicate_users_across_files = {user: files for user, files in all_users_with_files.items() if len(files) > 1}
-    if duplicate_users_across_files:
-        print(f"Found {len(duplicate_users_across_files)} users appearing in multiple files:")
-        for user, files in duplicate_users_across_files.items():
-            print(f"User {user} appears in: {', '.join(files)}")
-    else:
-        print("No users found in multiple files.")
-    
-    # Concatenate all dataframes
-    if all_dataframes:
-        # Use concat with ignore_index to ensure all rows are preserved
-        combined_df = pd.concat(all_dataframes, ignore_index=True, sort=False)
-        
-        # Validation: Make sure we didn't lose any rows
-        total_rows_after = len(combined_df)
-        print(f"\nTotal rows before concatenation: {total_rows_before}")
-        print(f"Total rows after concatenation: {total_rows_after}")
-        
-        if total_rows_before != total_rows_after:
-            print("WARNING: Row count mismatch after concatenation!")
-        
-        # Count duplicate rows based on User Email and Item Path
-        # Store this data to be passed to generate_college_usage_stats
-        total_rows = len(combined_df)
-        # Count duplicates - rows where the same user accessed the same item path
-        duplicate_count = total_rows - len(combined_df.drop_duplicates(subset=['User Email', 'Item Path']))
-        print(f"Total rows: {total_rows}, Duplicate rows: {duplicate_count}")
-        
-        # Save combined file
-        combined_csv = os.path.join(UPLOAD_FOLDER, 'combined_adobe_logs.csv')
-        combined_df.to_csv(combined_csv, index=False)
-        
-        # Verify that the required columns exist
-        required_columns = ['User Email', 'Item Path']
-        missing_columns = [col for col in required_columns if col not in combined_df.columns]
-        
-        if missing_columns:
-            raise ValueError(f"Required columns missing in input files: {', '.join(missing_columns)}. "
-                           f"Analysis requires columns: {', '.join(required_columns)}")
-        
-        # Process for Adobe analysis
-        combined_df['User Email'] = combined_df['User Email'].str.strip()
-        combined_df['Adobe App'] = combined_df['Item Path'].apply(extract_adobe_app)
-        
-        # Add row metrics to the dataframe as attributes to pass to the next function
-        combined_df.total_rows = total_rows
-        combined_df.duplicate_rows = duplicate_count
-        
-        return combined_df
-    
-    raise ValueError("No valid data found in uploaded files.")
 
 @app.route('/download')
 def download():
