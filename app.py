@@ -20,7 +20,10 @@ if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
     
 OUTPUT_FILE = os.path.join(UPLOAD_FOLDER, 'combined_output.csv')
-COLLEGE_STATS_FILE = os.path.join(UPLOAD_FOLDER, 'adobe_college_stats.xlsx')
+COLLEGE_STATS_FOLDER = os.path.join(UPLOAD_FOLDER, 'adobe_college_stats')
+if not os.path.exists(COLLEGE_STATS_FOLDER):
+    os.makedirs(COLLEGE_STATS_FOLDER)
+    
 ALLOWED_EXTENSIONS = {'csv', 'xlsx'}
 
 # Configure a larger upload size limit
@@ -336,11 +339,15 @@ def create_college_app_matrix(first_app_usage, valid_colleges, apps):
     
     return college_app_matrix
 
-def generate_college_usage_stats(df, output_file):
-    """Generate Excel file with college-wise Adobe app usage statistics."""
+def generate_college_usage_stats(df, output_folder):
+    """Generate individual Excel files with college-wise Adobe app usage statistics."""
     logger.info("Generating college usage statistics...")
     
     try:
+        # Create output folder if it doesn't exist
+        if not os.path.exists(output_folder):
+            os.makedirs(output_folder)
+            
         # Get row count metrics from the dataframe attributes
         total_rows = getattr(df, 'total_rows', len(df))
         duplicate_rows = getattr(df, 'duplicate_rows', 0)
@@ -356,89 +363,85 @@ def generate_college_usage_stats(df, output_file):
         logger.info(f"Processing statistics for {total_users} unique users")
         logger.info(f"UST Student Users: {ust_student_users}, Other Users: {other_users}")
         
-        # Create Excel writer
-        with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
-            # Sheet 1: Overall Statistics - add row count metrics
-            stats_df = pd.DataFrame({
-                'Metric': [
-                    'Total Unique Users', 
-                    'UST Student Users', 
-                    'Other Users',
-                    'Total Rows',
-                    'Duplicate Rows'
-                ],
-                'Count': [
-                    total_users, 
-                    ust_student_users, 
-                    other_users,
-                    total_rows,
-                    duplicate_rows
-                ]
-            })
-            
+        # File 1: Overall Statistics - add row count metrics with new formatting
+        overall_stats_file = os.path.join(output_folder, 'overall_statistics.xlsx')
+        stats_df = pd.DataFrame({
+            'Type of User': [
+                'Total Unique Users', 
+                'UST Student Users', 
+                'Other Users',
+                'Total Rows',
+                'Duplicate Rows'
+            ],
+            'Count': [
+                total_users, 
+                ust_student_users, 
+                other_users,
+                total_rows,
+                duplicate_rows
+            ]
+        })
+        
+        with pd.ExcelWriter(overall_stats_file, engine='openpyxl') as writer:
             stats_df.to_excel(writer, sheet_name='Overall Statistics', index=False)
             format_excel_sheet(writer.sheets['Overall Statistics'])
-            
-            # Sheet 2: College Distribution
-            # Filter UST student emails and extract college
-            ust_df = df[df['is_ust_student']].copy()
-            ust_df['College'] = ust_df['User Email'].apply(extract_college_unit)
-            
-            # Process user app data
-            first_app_usage = process_user_app_data(ust_df)
-            
-            # Get unique colleges and apps
-            valid_colleges = [college.upper() for college in get_valid_colleges()]
-            apps = get_all_adobe_apps()
-            
-            # Create cross-tabulation of colleges and apps
-            college_app_matrix = create_college_app_matrix(first_app_usage, valid_colleges, apps)
-            
-            # Create column names
-            columns = ['College', 'Total Unique Users'] + apps
-            college_df = pd.DataFrame(college_app_matrix, columns=columns)
-            
-            # Add total row
-            total_row = ['TOTAL', first_app_usage['College'].isin(valid_colleges).sum()]
-            for app in apps:
-                total_app_users = len(first_app_usage[
-                    (first_app_usage['Adobe App'] == app) & 
-                    first_app_usage['College'].isin(valid_colleges)
-                ])
-                total_row.append(total_app_users)
-            
-            college_df.loc[len(college_df)] = total_row
-            
-            # Get highest users per app
-            highest_users = get_highest_app_users(college_df, apps)
-            
-            # Add empty row
-            college_df.loc[len(college_df)] = [''] * len(college_df.columns)
-            
-            # Add header
-            college_df.loc[len(college_df)] = ['Highest Users per App'] + [''] * (len(college_df.columns) - 1)
-            
-            # Add highest users data
-            for app, college, count in highest_users:
-                college_df.loc[len(college_df)] = [f'{app}:', college, count] + [''] * (len(college_df.columns) - 3)
-            
-            # Write main college distribution to Excel
+        
+        # File 2: College Distribution
+        college_dist_file = os.path.join(output_folder, 'college_distribution.xlsx')
+        
+        # Filter UST student emails and extract college
+        ust_df = df[df['is_ust_student']].copy()
+        ust_df['College'] = ust_df['User Email'].apply(extract_college_unit)
+        
+        # Process user app data
+        first_app_usage = process_user_app_data(ust_df)
+        
+        # Get unique colleges and apps
+        valid_colleges = [college.upper() for college in get_valid_colleges()]
+        apps = get_all_adobe_apps()
+        
+        # Create cross-tabulation of colleges and apps
+        college_app_matrix = create_college_app_matrix(first_app_usage, valid_colleges, apps)
+        
+        # Create column names
+        columns = ['College', 'Total Unique Users'] + apps
+        college_df = pd.DataFrame(college_app_matrix, columns=columns)
+        
+        # We'll skip adding the total row as requested
+        
+        # Save college distribution to its own Excel file
+        with pd.ExcelWriter(college_dist_file, engine='openpyxl') as writer:
             college_df.to_excel(writer, sheet_name='College Distribution', index=False)
             format_excel_sheet(writer.sheets['College Distribution'])
+        
+        # File 3: Highest College Users Per App
+        highest_app_file = os.path.join(output_folder, 'highest_college_users_per_app.xlsx')
+        
+        # Get highest users per app with the requested column names
+        highest_users = get_highest_app_users(college_df, apps)
+        highest_users_df = pd.DataFrame(highest_users, columns=['Adobe App', 'Highest College', 'Total HCU'])
+        
+        # Save highest users per app to its own Excel file
+        with pd.ExcelWriter(highest_app_file, engine='openpyxl') as writer:
+            highest_users_df.to_excel(writer, sheet_name='Highest College Users', index=False)
+            format_excel_sheet(writer.sheets['Highest College Users'])
+        
+        # File 4: Other Users (non-student users)
+        other_users_file = os.path.join(output_folder, 'other_users.xlsx')
+        
+        other_users_df = df[~df['is_ust_student']].copy()
+        if 'Timestamp' in other_users_df.columns:
+            other_users_df = other_users_df.sort_values('Timestamp')
+        
+        # More efficient way to get first app usage
+        if not other_users_df.empty:
+            other_first_usage = other_users_df.groupby('User Email').first().reset_index()
+            other_users_summary = other_first_usage[['User Email', 'Adobe App']].rename(
+                columns={'Adobe App': 'First Adobe App Used'})
+            other_users_summary = other_users_summary.sort_values('User Email')
             
-            # Sheet 3: Others (non-student users)
-            other_users_df = df[~df['is_ust_student']].copy()
-            if 'Timestamp' in other_users_df.columns:
-                other_users_df = other_users_df.sort_values('Timestamp')
-            
-            # More efficient way to get first app usage
-            if not other_users_df.empty:
-                other_first_usage = other_users_df.groupby('User Email').first().reset_index()
-                other_users_summary = other_first_usage[['User Email', 'Adobe App']].rename(
-                    columns={'Adobe App': 'First Adobe App Used'})
-                other_users_summary = other_users_summary.sort_values('User Email')
-                
-                # Write others to separate sheet
+            # Write others to separate file
+            with pd.ExcelWriter(other_users_file, engine='openpyxl') as writer:
                 other_users_summary.to_excel(writer, sheet_name='Other Users', index=False)
                 format_excel_sheet(writer.sheets['Other Users'])
             
@@ -451,7 +454,6 @@ def generate_college_usage_stats(df, output_file):
         
         # Filter college_df for actual colleges
         actual_colleges = college_df[
-            (college_df['College'] != 'TOTAL') & 
             (college_df['College'] != '') & 
             (~college_df['College'].str.contains(':', na=False))
         ]
@@ -481,7 +483,7 @@ def generate_college_usage_stats(df, output_file):
     except Exception as e:
         logger.error(f"Error generating college usage statistics: {str(e)}", exc_info=True)
         return False, {}
-        
+      
 def process_files(files):
     """
     Process uploaded files and return a combined DataFrame with Adobe app detection.
@@ -629,7 +631,7 @@ def index():
         try:
             # Process files - directly go to college stats generation
             combined_df = process_files(valid_files)
-            success, preview_data = generate_college_usage_stats(combined_df, COLLEGE_STATS_FILE)
+            success, preview_data = generate_college_usage_stats(combined_df, COLLEGE_STATS_FOLDER)
             
             if success:
                 return render_template('index.html', success=True, file_count=len(valid_files), 
@@ -653,21 +655,57 @@ def index():
     
     return render_template('index.html')
 
-@app.route('/download')
-def download():
-    # Check if file exists first
-    if not os.path.exists(COLLEGE_STATS_FILE):
-        return render_template('index.html', error="No statistics file available for download. Please process files first.")
-        
-    # Direct download for college statistics file
-    download_name = 'adobe_college_stats.xlsx'
-    return send_file(COLLEGE_STATS_FILE, as_attachment=True, download_name=download_name)
+@app.route('/download/<filename>')
+def download_file(filename):
+    # Map simple filename to actual filepath
+    file_mapping = {
+        'overall_statistics.xlsx': 'overall_statistics.xlsx',
+        'college_distribution.xlsx': 'college_distribution.xlsx', 
+        'highest_college_users_per_app.xlsx': 'highest_college_users_per_app.xlsx',
+        'other_users.xlsx': 'other_users.xlsx'
+    }
+    
+    # Check if the requested file exists in our mapping
+    if filename not in file_mapping:
+        return render_template('index.html', error=f"Invalid file requested: {filename}")
+    
+    # Build the full file path
+    file_path = os.path.join(COLLEGE_STATS_FOLDER, file_mapping[filename])
+    
+    # Check if file exists
+    if not os.path.exists(file_path):
+        return render_template('index.html', error=f"The requested file {filename} is not available for download. Please process files first.")
+    
+    # Set appropriate download filename
+    download_name = filename
+    
+    # Send the file
+    return send_file(file_path, as_attachment=True, download_name=download_name)
 
-# Add a custom error handler for the 413 entity too large error
-@app.errorhandler(413)
-def request_entity_too_large(error):
-    return render_template('index.html', 
-                          error="The file(s) you tried to upload are too large. Please keep total size under 1GB."), 413
+@app.route('/download_all')
+def download_all():
+    # Check if the directory exists
+    if not os.path.exists(COLLEGE_STATS_FOLDER):
+        return render_template('index.html', error="No statistics files available for download. Please process files first.")
+    
+    # Create a zip file of all Excel files
+    import zipfile
+    import tempfile
+    
+    # Create temp file for the zip
+    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
+    temp_file.close()
+    
+    # Create zip file
+    with zipfile.ZipFile(temp_file.name, 'w') as zipf:
+        for root, dirs, files in os.walk(COLLEGE_STATS_FOLDER):
+            for file in files:
+                if file.endswith('.xlsx'):
+                    file_path = os.path.join(root, file)
+                    zipf.write(file_path, arcname=file)
+    
+    # Return the zip file
+    return send_file(temp_file.name, as_attachment=True, download_name='adobe_college_stats.zip')
 
 if __name__ == '__main__':
     # Disable the reloader to avoid compatibility issues

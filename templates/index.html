@@ -100,9 +100,12 @@
                     </table>
                 </div>
             </div>
-            
             <div class="action-buttons">
-                <a href="{{ url_for('download') }}" class="download-btn">Download data</a>
+                <a href="{{ url_for('download_file', filename='overall_statistics.xlsx') }}" class="download-btn">Download Overall Statistics</a>
+                <a href="{{ url_for('download_file', filename='college_distribution.xlsx') }}" class="download-btn">Download College Distribution</a>
+                <a href="{{ url_for('download_file', filename='highest_college_users_per_app.xlsx') }}" class="download-btn">Download App Usage by College</a>
+                <a href="{{ url_for('download_file', filename='other_users.xlsx') }}" class="download-btn">Download Other Users</a>
+                <a href="{{ url_for('download_all') }}" class="download-btn">Download All Files (ZIP)</a>
                 <a href="{{ url_for('index') }}" class="return-btn">Return to home</a>
             </div>
         </div>
