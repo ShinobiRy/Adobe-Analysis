@@ -363,30 +363,24 @@ def generate_college_usage_stats(df, output_folder):
         logger.info(f"Processing statistics for {total_users} unique users")
         logger.info(f"UST Student Users: {ust_student_users}, Other Users: {other_users}")
         
-        # File 1: Overall Statistics - add row count metrics with new formatting
+        # File 1: Overall Statistics - simplified version without formatting
         overall_stats_file = os.path.join(output_folder, 'overall_statistics.xlsx')
         stats_df = pd.DataFrame({
             'Type of User': [
-                'Total Unique Users', 
                 'UST Student Users', 
-                'Other Users',
-                'Total Rows',
-                'Duplicate Rows'
+                'Other Users'
             ],
             'Count': [
-                total_users, 
                 ust_student_users, 
-                other_users,
-                total_rows,
-                duplicate_rows
+                other_users
             ]
         })
         
         with pd.ExcelWriter(overall_stats_file, engine='openpyxl') as writer:
             stats_df.to_excel(writer, sheet_name='Overall Statistics', index=False)
-            format_excel_sheet(writer.sheets['Overall Statistics'])
+            # No formatting applied
         
-        # File 2: College Distribution
+        # File 2: College Distribution - restructured with pivot
         college_dist_file = os.path.join(output_folder, 'college_distribution.xlsx')
         
         # Filter UST student emails and extract college
@@ -400,31 +394,52 @@ def generate_college_usage_stats(df, output_folder):
         valid_colleges = [college.upper() for college in get_valid_colleges()]
         apps = get_all_adobe_apps()
         
-        # Create cross-tabulation of colleges and apps
-        college_app_matrix = create_college_app_matrix(first_app_usage, valid_colleges, apps)
+        # Create a pivot table style DataFrame
+        # First, count app usage per college
+        app_counts = pd.pivot_table(
+            first_app_usage, 
+            values='User Email', 
+            index='Adobe App', 
+            columns='College', 
+            aggfunc='count', 
+            fill_value=0
+        )
         
-        # Create column names
-        columns = ['College', 'Total Unique Users'] + apps
-        college_df = pd.DataFrame(college_app_matrix, columns=columns)
+        # Ensure all valid colleges are included
+        for college in valid_colleges:
+            if college not in app_counts.columns:
+                app_counts[college] = 0
         
-        # We'll skip adding the total row as requested
+        # Ensure all apps are included
+        for app in apps:
+            if app not in app_counts.index:
+                app_counts.loc[app] = 0
+        
+        # Reorder columns by college codes
+        app_counts = app_counts[sorted(app_counts.columns)]
         
         # Save college distribution to its own Excel file
         with pd.ExcelWriter(college_dist_file, engine='openpyxl') as writer:
-            college_df.to_excel(writer, sheet_name='College Distribution', index=False)
-            format_excel_sheet(writer.sheets['College Distribution'])
+            app_counts.to_excel(writer, sheet_name='College Distribution')
+            # No formatting applied
         
-        # File 3: Highest College Users Per App
+        # File 3: Highest College Users Per App - without formatting
         highest_app_file = os.path.join(output_folder, 'highest_college_users_per_app.xlsx')
+        
+        # For this file, we'll use the original app counting approach
+        # since we need to identify the highest college per app
+        college_app_matrix = create_college_app_matrix(first_app_usage, valid_colleges, apps)
+        columns = ['College', 'Total Unique Users'] + apps
+        college_df = pd.DataFrame(college_app_matrix, columns=columns)
         
         # Get highest users per app with the requested column names
         highest_users = get_highest_app_users(college_df, apps)
         highest_users_df = pd.DataFrame(highest_users, columns=['Adobe App', 'Highest College', 'Total HCU'])
         
-        # Save highest users per app to its own Excel file
+        # Save highest users per app to its own Excel file without formatting
         with pd.ExcelWriter(highest_app_file, engine='openpyxl') as writer:
             highest_users_df.to_excel(writer, sheet_name='Highest College Users', index=False)
-            format_excel_sheet(writer.sheets['Highest College Users'])
+            # No formatting applied
         
         # File 4: Other Users (non-student users)
         other_users_file = os.path.join(output_folder, 'other_users.xlsx')
@@ -440,16 +455,14 @@ def generate_college_usage_stats(df, output_folder):
                 columns={'Adobe App': 'First Adobe App Used'})
             other_users_summary = other_users_summary.sort_values('User Email')
             
-            # Write others to separate file
+            # Write others to separate file without formatting
             with pd.ExcelWriter(other_users_file, engine='openpyxl') as writer:
                 other_users_summary.to_excel(writer, sheet_name='Other Users', index=False)
-                format_excel_sheet(writer.sheets['Other Users'])
+                # No formatting applied
             
         # Format data for template display
-        # Restructure highest_users to match template expectations
+        # Use the original college_df for display purposes
         highest_users_per_app = [(app, college, count) for app, college, count in highest_users if count > 0]
-        
-        # Only include entries that have both app and college
         highest_users_per_college = [(app, college) for app, college, _ in highest_users if college]
         
         # Filter college_df for actual colleges
