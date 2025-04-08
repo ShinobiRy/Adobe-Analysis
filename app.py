@@ -720,6 +720,10 @@ def download_all():
     # Return the zip file
     return send_file(temp_file.name, as_attachment=True, download_name='adobe_college_stats.zip')
 
+@app.route("/")
+def home():
+    return render_template("index.html")
+
 if __name__ == '__main__':
     # Disable the reloader to avoid compatibility issues
     app.run(debug=True, use_reloader=False)
