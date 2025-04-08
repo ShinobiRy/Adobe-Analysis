@@ -7,30 +7,33 @@ Adobe App Usage Detector is a lightweight Flask-based web application that analy
 - Smart App Detection: Matches usage patterns to known Adobe tools based on how files are accessed and modified.
 - Web-based Interface: Clean and responsive interface built using HTML, CSS, and JS, rendered through Flask.
 
-🗒️Colleges Abbreviations:
-'ab' : Faculty of Arts and Letters, 
-'acct' : College of Accountancy, 
-'archi' : College of Architecture, 
-'cfad' : College of Fine Arts and Design, 
-'cics' : College of Information and Computing Sciences, 
-'comm' : College of Commerce and Business Administration, 
-'crs' : College of Rehabilitation Sciences, 
-'cthm': College of Tourism and Hospitality Management,
-'eccle' : Ecclesiastical Faculties, 
-'educ' : College of Education
-(1926), 
-'ehs' : Education High School, 
-'eng' : Faculty of Engineering, 
-'gs' : Graduate School, 
-'gslaw': Graduate School of Law, 
-'ipea' : Institute of Physical Education and Athletics, 
-'jhs' : Junior High School,
-'law' : Graduate School of Law, 
-'med' : Faculty of Medicine and Surgery, 
-'music' : Conservatory of Music, 
-'nur' : College of Nursing, 
-'pharma' : Faculty of Pharmacy, 
-'sc' : Short Course, 
-'sci' : College of Science, 
-'shs': Senior High School, 
-'gensan' : UST General Santos
+▶️ How to Run the Project (Windows)
+This project is a Flask web app that detects which Adobe application was used based on file paths, activity history, and system logs.
+
+🧾 Steps
+1. Download the Repository
+- Visit the GitHub repository page.
+- Click Code → Download ZIP and extract it to your local machine.
+
+Or, if using Git:
+
+git clone https://github.com/your-username/shinobiry-adobe-analysis.git
+cd shinobiry-adobe-analysis
+
+2. Locate and Run run_app.bat
+- Inside the extracted folder (shinobiry-adobe-analysis), find the file named: run_app.bat
+- Double-click it.
+
+This batch file will:
+- Automatically set up a virtual environment (venv) if not already created
+- Install the required packages listed in requirements.txt
+- Run the Flask application using python app.py
+- Open your default browser at: http://127.0.0.1:5000
+
+✅ After Running
+- Once opened in the browser, you can interact with the app to analyze Adobe usage data through the web interface.
+
+❌ To Stop the App
+- Focus the command prompt window that opened
+- Press Ctrl + C to safely stop the Flask server
+
